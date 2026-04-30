@@ -1,25 +1,45 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, Alert } from 'react-native';
-// TODO: Importar expo-camera, expo-location e async-storage
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as Location from 'expo-location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const SEGREDOS_STORAGE_KEY = '@geovault:segredos';
 
 export default function NovoSegredoScreen() {
   const [texto, setTexto] = useState('');
   const [fotoUri, setFotoUri] = useState<string | null>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const cameraRef = useRef<CameraView | null>(null);
 
   // Lógica do botão de abrir câmera
   const handleAbrirCamera = async () => {
-    // TODO 1: Pedir permissão da câmera
-    // Se permitido, abrir a câmera mudando o estado:
+    if (!cameraPermission?.granted) {
+      const permissionResponse = await requestCameraPermission();
+      if (!permissionResponse.granted) {
+        Alert.alert('Permissão necessária', 'Você precisa permitir o uso da câmera para tirar a foto do segredo.');
+        return;
+      }
+    }
+
     setIsCameraOpen(true);
   };
 
   // Lógica após tirar a foto
   const handleTirarFoto = async () => {
-    // TODO 2: Usar o cameraRef para tirar a foto
-    // Salvar a URI no estado setFotoUri e fechar a câmera
-    Alert.alert("Dica", "Implemente a captura da foto aqui!");
-    setIsCameraOpen(false);
+    try {
+      const foto = await cameraRef.current?.takePictureAsync({ quality: 0.7 });
+      if (!foto?.uri) {
+        Alert.alert('Erro', 'Não foi possível capturar a foto. Tente novamente.');
+        return;
+      }
+
+      setFotoUri(foto.uri);
+      setIsCameraOpen(false);
+    } catch {
+      Alert.alert('Erro', 'Falha ao tirar a foto.');
+    }
   };
 
   // Lógica de salvar no armazenamento local
@@ -29,23 +49,42 @@ export default function NovoSegredoScreen() {
       return;
     }
 
-    // TODO 3: Buscar a localização atual do usuário (GPS)
+    try {
+      const permissionResponse = await Location.requestForegroundPermissionsAsync();
+      if (permissionResponse.status !== 'granted') {
+        Alert.alert('Permissão necessária', 'Você precisa permitir o GPS para salvar o segredo no mapa.');
+        return;
+      }
 
-    // TODO 4: Montar o objeto do segredo e salvar no AsyncStorage
-    Alert.alert("Sucesso", "Implemente o AsyncStorage aqui!");
+      const localizacao = await Location.getCurrentPositionAsync({});
 
-    setTexto('');
-    setFotoUri(null);
+      const novoSegredo = {
+        id: Date.now().toString(),
+        texto: texto.trim(),
+        fotoUri,
+        latitude: localizacao.coords.latitude,
+        longitude: localizacao.coords.longitude,
+      };
+
+      const segredosSalvos = await AsyncStorage.getItem(SEGREDOS_STORAGE_KEY);
+      const listaAtual = segredosSalvos ? JSON.parse(segredosSalvos) : [];
+      const novaLista = [...listaAtual, novoSegredo];
+
+      await AsyncStorage.setItem(SEGREDOS_STORAGE_KEY, JSON.stringify(novaLista));
+
+      Alert.alert('Sucesso', 'Segredo salvo no cofre!');
+      setTexto('');
+      setFotoUri(null);
+    } catch {
+      Alert.alert('Erro', 'Não foi possível salvar o segredo.');
+    }
   };
 
   // --- RENDERIZAÇÃO DA CÂMERA EM TELA CHEIA ---
   if (isCameraOpen) {
     return (
       <View style={styles.container}>
-        <Text style={{ color: '#fff', marginTop: 50, textAlign: 'center' }}>
-          {/* TODO: Substituir esta View pelo componente <CameraView> */}
-          (Câmera deve aparecer aqui)
-        </Text>
+        <CameraView style={StyleSheet.absoluteFill} ref={cameraRef} facing="back" />
 
         <View style={styles.cameraOverlay}>
           <TouchableOpacity style={styles.btnCapturar} onPress={handleTirarFoto}>

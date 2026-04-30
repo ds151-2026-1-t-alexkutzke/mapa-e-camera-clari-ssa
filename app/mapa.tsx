@@ -1,7 +1,10 @@
-import { useState, useEffect } from 'react';
-import { View, StyleSheet, Text } from 'react-native';
+import { useCallback, useState } from 'react';
+import { View, StyleSheet, Text, Image } from 'react-native';
 import MapView, { Marker, Callout } from 'react-native-maps';
-// TODO: Importar AsyncStorage
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
+
+const SEGREDOS_STORAGE_KEY = '@geovault:segredos';
 
 // Define o formato que o segredo terá
 interface Segredo {
@@ -16,20 +19,34 @@ export default function MapaScreen() {
   const [segredos, setSegredos] = useState<Segredo[]>([]);
 
   // Carrega os dados toda vez que a tela é aberta
-  useEffect(() => {
-    carregarSegredos();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      carregarSegredos();
+    }, [])
+  );
 
   const carregarSegredos = async () => {
-    // TODO 5: Ler a lista de segredos do AsyncStorage, fazer JSON.parse() e colocar no estado setSegredos.
+    try {
+      const dados = await AsyncStorage.getItem(SEGREDOS_STORAGE_KEY);
+      const lista: Segredo[] = dados ? JSON.parse(dados) : [];
+      setSegredos(lista);
+    } catch {
+      setSegredos([]);
+    }
   };
 
   return (
     <View style={styles.container}>
-      {/* TODO 6: O MapView precisa receber o initialRegion ou region */}
-      <MapView style={styles.map}>
+      <MapView
+        style={styles.map}
+        initialRegion={{
+          latitude: segredos[0]?.latitude ?? -25.4284,
+          longitude: segredos[0]?.longitude ?? -49.2733,
+          latitudeDelta: 0.03,
+          longitudeDelta: 0.03,
+        }}
+      >
 
-        {/* TODO 7: Fazer um map() no array de segredos para criar os Markers */}
         {segredos.map((segredo) => (
           <Marker
             key={segredo.id}
@@ -38,7 +55,11 @@ export default function MapaScreen() {
             <Callout>
               <View style={styles.calloutContainer}>
                 <Text style={styles.calloutText}>{segredo.texto}</Text>
-                {/* Desafio Bônus: Mostrar a miniatura da foto aqui dentro! */}
+                {segredo.fotoUri ? (
+                  <Image source={{ uri: segredo.fotoUri }} style={styles.calloutImage} />
+                ) : (
+                  <Text style={styles.calloutSemFoto}>Sem foto</Text>
+                )}
               </View>
             </Callout>
           </Marker>
@@ -58,8 +79,10 @@ export default function MapaScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   map: { width: '100%', height: '100%' },
-  calloutContainer: { width: 150, padding: 5 },
+  calloutContainer: { width: 170, padding: 6 },
   calloutText: { fontWeight: 'bold', textAlign: 'center' },
+  calloutImage: { width: '100%', height: 90, borderRadius: 8, marginTop: 6 },
+  calloutSemFoto: { marginTop: 6, textAlign: 'center', color: '#666' },
   avisoContainer: { position: 'absolute', top: 50, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.7)', padding: 10, borderRadius: 20 },
   avisoText: { color: '#fff' }
 });
